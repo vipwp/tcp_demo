@@ -16,12 +16,12 @@ def main():
     sock.listen(1)
 
     while True:
+        print('listening...')
         client_sock, address = sock.accept()
-        print(address, client_sock)
+        print('new client:', address, client_sock)
         clients.append(client_sock)
+        client_sock.send('welcome'.encode('u8'))
         print(client_sock.recv(1024))
-        # client_sock.send(b'test_message')
-        # client_sock.close()
 
 
 if __name__ == '__main__':

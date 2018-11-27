@@ -2,8 +2,6 @@
 # coding:utf-8
 
 import socket
-import time
-
 
 ip = 'localhost'
 port = 55555
@@ -11,13 +9,13 @@ port = 55555
 
 def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    print(sock)
     sock.connect((ip, port))
-    print(sock)
     while 1:
         data = sock.recv(1024)
         if not data:
             raise Exception('socket closed')
+        print(data)
+        sock.send(('received:' + data.decode('u8')).encode('u8'))
 
 
 if __name__ == '__main__':
