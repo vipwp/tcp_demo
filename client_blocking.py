@@ -11,11 +11,15 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((ip, port))
     while 1:
-        data = sock.recv(1024)
+        try:
+            data = sock.recv(1024)
+        except:
+            data = None
         if not data:
             raise Exception('socket closed')
-        print(data)
-        sock.send(('received:' + data.decode('u8')).encode('u8'))
+        sock.send(input('>>>').encode('u8'))
+        # sock.send(pickle.dumps('received:' + pickle.loads(data)))
+        print(b'from server: ' + data)
 
 
 if __name__ == '__main__':
