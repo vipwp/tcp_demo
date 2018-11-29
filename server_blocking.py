@@ -14,7 +14,7 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind((ip, port))
     print('listening...')
-    sock.listen(1)
+    sock.listen(2)
     client_sock, address = sock.accept()
     print('new client:', address, client_sock)
     while True:

@@ -1,86 +1,157 @@
-#include <stdio.h>
-#include <string.h>   //strlen
-#include <stdlib.h>
-#include <errno.h>
-#include <unistd.h>   //close
-#include <arpa/inet.h>    //close
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros
- 
-#define TRUE   1
-#define FALSE  0
-#define PORT 8888
-main()
+#include<stdio.h>
+#include<sys/types.h>
+#include<sys/socket.h>
+#include<unistd.h>
+#include<netinet/in.h>
+#include<arpa/inet.h>
+#include<stdlib.h>
+#include<string.h>
+#include<sys/time.h>
+static void Usage(const char* proc)
 {
-    int sockfd;
-    struct sockaddr_in serv_addr;
-
-    int i, sent;
-    char buf[100];
-    char buff[100];
-
-    /*
-    Opening a socket
-    Check whether opening is successful or not
-    */
-    if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
-        printf("Unable to create socket\n");
+    printf("%s [local_ip] [local_port]\n",proc);
+}
+int array[4096];
+static int start_up(const char* _ip,int _port)
+{
+    int sock = socket(AF_INET,SOCK_STREAM,0);
+    if(sock < 0)
+    {
+        perror("socket");
+        exit(1);
     }
-    printf("Socket created\n");
-
-
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    serv_addr.sin_port = htons(6000);
-
-    /*
-    Establish a connection with the server process
-    */
-    if((connect(sockfd, (struct socketaddr *)&serv_addr, sizeof(serv_addr)))<0){
-        printf("Unable to connect to server\n");
-        exit(0);
+    struct sockaddr_in local;
+    local.sin_family = AF_INET;
+    local.sin_port = htons(_port);
+    local.sin_addr.s_addr = inet_addr(_ip);
+    if(bind(sock,(struct sockaddr*)&local,sizeof(local)) < 0)
+    {
+        perror("bind");
+        exit(2);
     }
-
-    printf("Client connected\n");
-
-    while(1){
-
-        for(i=0; i<100; i++){
-            buf[i] = '\0';
-            buff[i] = '\0';
+    if(listen(sock,10) < 0)
+    {
+        perror("listen");
+        exit(3);
+    }
+    return sock;
+}
+int main(int argc,char* argv[])
+{
+    if(argc != 3)
+    {
+        Usage(argv[0]);
+        return -1;
+    }
+    int listensock = start_up(argv[1],atoi(argv[2]));
+    int maxfd = 0;
+    fd_set rfds;
+    fd_set wfds;
+    array[0] = listensock;
+    int i = 1;
+    int array_size = sizeof(array)/sizeof(array[0]);
+    for(; i < array_size;i++)
+    {
+        array[i] = -1;
+    }
+    while(1)
+    {
+        FD_ZERO(&rfds);
+        FD_ZERO(&wfds);
+        for(i = 0;i < array_size;++i)
+        {
+            if(array[i] > 0)
+            {
+                FD_SET(array[i],&rfds);
+                FD_SET(array[i],&wfds);
+                if(array[i] > maxfd)
+                {
+                    maxfd = array[i];
+                }
+            }
         }
+        switch(select(maxfd + 1,&rfds, &wfds, NULL, NULL))
+        {
+            case 0:
+                {
+                    printf("timeout\n");
+                    break;
+                }
+            case -1:
+                {
+                    perror("select");
+                    break;
+                }
+             default:
+                {
+                    int j = 0;
+                    for(; j < array_size; ++j)
+                    {
+                        if(j == 0 && FD_ISSET(array[j],&rfds))
+                        {
+                            //listensock happened read events
+                            struct sockaddr_in client;
+                            socklen_t len = sizeof(client);
+                            int new_sock = accept(listensock,(struct sockaddr*)&client,&len);
+                            if(new_sock < 0)//accept failed
+                            {
+                                perror("accept");
+                                continue;
+                            }
+                            else//accept success
+                            {
+                                printf("get a new client%s\n",inet_ntoa(client.sin_addr));
+                                fflush(stdout);
+                                int k = 1;
+                                for(; k < array_size;++k)
+                                {
+                                    if(array[k] < 0)
+                                    {
+                                        array[k] = new_sock;
+                                        if(new_sock > maxfd)
+                                            maxfd = new_sock;
+                                        break;
+                                    }
+                                }
+                                if(k == array_size)
+                                {
+                                    close(new_sock);
+                                }
+                            }
+                        }//j == 0
+                        else if(j != 0 && FD_ISSET(array[j], &rfds))
+                        {
+                            //new_sock happend read events
+                            char buf[1024];
+                            ssize_t s = read(array[j],buf,sizeof(buf) - 1);
+                            if(s > 0)//read success
+                            {
+                                buf[s] = 0;
+                                printf("clientsay#%s\n",buf);
+                                if(FD_ISSET(array[j],&wfds))
+                                {
+                                    char *msg = "HTTP/1.0 200 OK <\r\n\r\n<html><h1>yingying beautiful</h1></html>\r\n";
+                                    write(array[j],msg,strlen(msg));
 
-        fd_set rfd, wfd;
-        struct timeval tv;
-        tv.tv_sec = 0;
-        tv.tv_usec = 0;
-        FD_ZERO( &rfd);
-        FD_ZERO( &wfd);
-
-        FD_SET( sockfd, &rfd);
-        //FD_SET( sockfd, &wfd);
-        FD_SET( 0, &wfd);
-
-        if( (select( sockfd + 1, &rfd, &wfd, NULL, &tv) < 0)) {
-            printf(" Select error \n");
-            exit(0);
-        }
-
-        if( FD_ISSET( sockfd, &rfd)) { // we got data ... need to read it
-            recv(sockfd, buff, 100, 0);
-            printf("Received result from server = %s\n",buff);
-        }
-
-        if( FD_ISSET( 0, &wfd)) {
-            fflush(stdin);
-            printf(">");
-            gets(buf);
-            sent = send(sockfd, buf, strlen(buf) + 1, 0);
-            printf("-------------Sent %d bytes to server--------------\n", sent);
+                                }
+                            }
+                            else if(0 == s)
+                            {
+                                printf("client quit!\n");
+                                close(array[j]);
+                                array[j] = -1;
+                            }
+                            else
+                            {
+                                perror("read");
+                                close(array[j]);
+                                array[j] = -1;
+                            }
+                        }//else j != 0
+                    }
+                    break;
+                }
         }
     }
-    printf("----------------Closing client------------------ \n");
-    close(sockfd);
+    return 0;
 }
